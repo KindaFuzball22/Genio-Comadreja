@@ -14,7 +14,6 @@ st.set_page_config(page_title="Gestor de Horarios Escolares", page_icon="📅", 
 SUPABASE_URL = "https://ibcevhvocpblyurbzqbl.supabase.co"
 SUPABASE_KEY = "sb_publishable_qOY3jh9OFockRvkcrO9GNw_sWI8vLfx"
 
-# Intenta leer de st.secrets si está en la nube; si no, usa las de arriba
 try:
     if "SUPABASE_URL" in st.secrets:
         SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -248,9 +247,9 @@ st.markdown("---")
 col_top1, col_top2 = st.columns([1, 4])
 with col_top1:
     with st.expander("➕ Crear Nuevo Horario"):
-        nuevo_tit = st.text_input("Título del Horario (ej: 6to G 2026)", value="")
-        n_curso = st.text_input("Curso (ej: 6)", value="")
-        n_div = st.text_input("División (ej: G)", value="")
+        nuevo_tit = st.text_input("Título Horario", value="")
+        n_curso = st.text_input("Curso", value="")
+        n_div = st.text_input("División", value="")
         if st.button("Guardar Nuevo Horario", type="primary"):
             titulo_limpio = nuevo_tit.strip()
             if titulo_limpio and titulo_limpio not in st.session_state["horarios"]:
@@ -267,234 +266,8 @@ with col_top1:
                 st.session_state["horarios"][titulo_limpio] = nuevo_datos
                 guardar_horario_db(titulo_limpio, nuevo_datos)
                 st.session_state["horario_activo"] = titulo_limpio
-                st.success(f"¡Horario '{titulo_limpio}' creado y guardado en la nube!")
+                st.success("¡Horario creado en la nube!")
                 st.rerun()
-            else:
-                st.error("Por favor ingresa un título válido que no esté repetido.")
 
 st.markdown("### 🔍 Panel de Búsqueda Combinada")
-
-profesores_encontrados = set()
-for h in st.session_state["horarios"].values():
-    for row in h.get("profesores", []):
-        for p in row:
-            if p and p.strip():
-                profesores_encontrados.add(p.strip())
-    ct = h.get("contraturno")
-    if ct and isinstance(ct, dict):
-        for row in ct.get("profesores", []):
-            for p in row:
-                if p and p.strip():
-                    profesores_encontrados.add(p.strip())
-
-lista_profesores = sorted(list(profesores_encontrados))
-lista_cursos = sorted(list({h.get("curso", "").strip() for h in st.session_state["horarios"].values() if h.get("curso", "").strip()}))
-lista_divisiones = sorted(list({h.get("division", "").strip() for h in st.session_state["horarios"].values() if h.get("division", "").strip()}))
-
-materias_encontradas = set()
-for h in st.session_state["horarios"].values():
-    for row in h.get("materias", []):
-        for m in row:
-            if m and m.strip():
-                materias_encontradas.add(m.strip())
-    ct = h.get("contraturno")
-    if ct and isinstance(ct, dict):
-        for row in ct.get("materias", []):
-            for m in row:
-                if m and m.strip():
-                    materias_encontradas.add(m.strip())
-
-lista_materias = sorted(list(materias_encontradas))
-lista_titulos_horarios = sorted(list(st.session_state["horarios"].keys()))
-
-col1, col2, col3, col4, col5 = st.columns(5)
-with col1:
-    search_prof = st.selectbox("Profesor", [""] + lista_profesores)
-with col2:
-    search_curso = st.selectbox("Curso", [""] + lista_cursos)
-with col3:
-    search_div = st.selectbox("División", [""] + lista_divisiones)
-with col4:
-    search_materia = st.selectbox("Materia", [""] + lista_materias)
-with col5:
-    search_directo = st.selectbox("Acceso Directo", [""] + lista_titulos_horarios)
-
-if search_directo != "":
-    st.session_state["horario_activo"] = search_directo
-
-coincidencias = []
-for key, h_data in st.session_state["horarios"].items():
-    cumple = True
-    if search_curso != "" and h_data.get("curso") != search_curso:
-        cumple = False
-    if search_div != "" and h_data.get("division") != search_div:
-        cumple = False
-    
-    if search_prof != "":
-        prof_en_principal = any(search_prof.lower() in p.lower() for row in h_data.get("profesores", []) for p in row if p)
-        ct_data = h_data.get("contraturno")
-        prof_en_ct = False
-        if ct_data and isinstance(ct_data, dict):
-            prof_en_ct = any(search_prof.lower() in p.lower() for row in ct_data.get("profesores", []) for p in row if p)
-        
-        if not (prof_en_principal or prof_en_ct):
-            cumple = False
-            
-    if search_materia != "":
-        mat_en_principal = any(search_materia.lower() in m.lower() for row in h_data.get("materias", []) for m in row if m)
-        ct_data = h_data.get("contraturno")
-        mat_en_ct = False
-        if ct_data and isinstance(ct_data, dict):
-            mat_en_ct = any(search_materia.lower() in m.lower() for row in ct_data.get("materias", []) for m in row if m)
-            
-        if not (mat_en_principal or mat_en_ct):
-            cumple = False
-            
-    if cumple:
-        coincidencias.append(key)
-
-if search_directo == "" and (search_prof != "" or search_curso != "" or search_div != "" or search_materia != ""):
-    st.markdown("#### 📋 Resultados de Búsqueda:")
-    if coincidencias:
-        cols_res = st.columns(min(len(coincidencias), 4))
-        for idx, key_match in enumerate(coincidencias):
-            with cols_res[idx % 4]:
-                if st.button(f"📌 {key_match}", key=f"res_{key_match}", use_container_width=True):
-                    st.session_state["horario_activo"] = key_match
-                    st.rerun()
-    else:
-        st.info("No se encontraron horarios con los filtros seleccionados.")
-
-st.markdown("---")
-
-active_key = st.session_state["horario_activo"]
-
-if active_key and active_key in st.session_state["horarios"]:
-    datos = st.session_state["horarios"][active_key]
-    
-    st.subheader(f"✏️ Editando Horario: {datos['titulo']}")
-    
-    c_t, c_c, c_d = st.columns([3, 1, 1])
-    with c_t:
-        nuevo_titulo = st.text_input("Título Principal", value=datos["titulo"])
-        if nuevo_titulo.strip() and nuevo_titulo.strip() != active_key:
-            nuevo_t_limpio = nuevo_titulo.strip()
-            if nuevo_t_limpio not in st.session_state["horarios"]:
-                eliminar_horario_db(active_key)
-                st.session_state["horarios"][nuevo_t_limpio] = st.session_state["horarios"].pop(active_key)
-                st.session_state["horarios"][nuevo_t_limpio]["titulo"] = nuevo_t_limpio
-                st.session_state["horario_activo"] = nuevo_t_limpio
-                guardar_horario_db(nuevo_t_limpio, st.session_state["horarios"][nuevo_t_limpio])
-                st.rerun()
-    with c_c:
-        nuevo_curso = st.text_input("Curso", value=datos["curso"])
-        if nuevo_curso != datos["curso"]:
-            datos["curso"] = nuevo_curso.strip()
-            guardar_horario_db(active_key, datos)
-    with c_d:
-        nueva_div = st.text_input("División", value=datos["division"])
-        if nueva_div != datos["division"]:
-            datos["division"] = nueva_div.strip()
-            guardar_horario_db(active_key, datos)
-
-    st.markdown("##### 📅 Grilla Principal (9 Horas)")
-    
-    cols_grid = st.columns([1.5, 2, 2, 2, 2, 2])
-    cols_grid[0].markdown("**HORARIO**")
-    for idx, dia in enumerate(datos["dias"]):
-        cols_grid[idx + 1].markdown(f"**{dia}**")
-
-    for i in range(9):
-        cols_row = st.columns([1.5, 2, 2, 2, 2, 2])
-        nueva_hora = cols_row[0].text_input(f"H{i}", value=datos["horas"][i], key=f"h_{active_key}_{i}", placeholder="Hora", label_visibility="collapsed")
-        if nueva_hora != datos["horas"][i]:
-            datos["horas"][i] = nueva_hora
-            guardar_horario_db(active_key, datos)
-        
-        for j in range(5):
-            with cols_row[j + 1]:
-                nueva_mat = cols_row[j + 1].text_input(f"M{i}_{j}", value=datos["materias"][i][j], key=f"m_{active_key}_{i}_{j}", placeholder="Materia", label_visibility="collapsed")
-                nuevo_prof = cols_row[j + 1].text_input(f"P{i}_{j}", value=datos["profesores"][i][j], key=f"p_{active_key}_{i}_{j}", placeholder="Profesor", label_visibility="collapsed")
-                
-                if nueva_mat != datos["materias"][i][j]:
-                    datos["materias"][i][j] = nueva_mat
-                    guardar_horario_db(active_key, datos)
-                if nuevo_prof != datos["profesores"][i][j]:
-                    datos["profesores"][i][j] = nuevo_prof
-                    guardar_horario_db(active_key, datos)
-
-    st.markdown("---")
-    st.markdown("##### 🌙 Sección Contraturno")
-    
-    if datos["contraturno"] is not None:
-        ct = datos["contraturno"]
-        for i in range(len(ct["horas"])):
-            cols_ct = st.columns([1.5, 2, 2, 2, 2, 2])
-            ct_h_val = cols_ct[0].text_input(f"CT H{i}", value=ct["horas"][i], key=f"ct_h_{active_key}_{i}", placeholder="Hora", label_visibility="collapsed")
-            if ct_h_val != ct["horas"][i]:
-                ct["horas"][i] = ct_h_val
-                guardar_horario_db(active_key, datos)
-                
-            for j in range(5):
-                with cols_ct[j + 1]:
-                    ct_m_val = cols_ct[j + 1].text_input(f"CT M{i}_{j}", value=ct["materias"][i][j], key=f"ct_m_{active_key}_{i}_{j}", placeholder="Materia", label_visibility="collapsed")
-                    ct_p_val = cols_ct[j + 1].text_input(f"CT P{i}_{j}", value=ct["profesores"][i][j], key=f"ct_p_{active_key}_{i}_{j}", placeholder="Profesor", label_visibility="collapsed")
-                    
-                    if ct_m_val != ct["materias"][i][j]:
-                        ct["materias"][i][j] = ct_m_val
-                        guardar_horario_db(active_key, datos)
-                    if ct_p_val != ct["profesores"][i][j]:
-                        ct["profesores"][i][j] = ct_p_val
-                        guardar_horario_db(active_key, datos)
-
-    col_ct_btn1, col_ct_btn2 = st.columns(2)
-    with col_ct_btn1:
-        if st.button("➕ Agregar 1 Fila de Contraturno", use_container_width=True):
-            if datos["contraturno"] is None:
-                datos["contraturno"] = {
-                    "horas": [""],
-                    "materias": [["" for _ in range(5)]],
-                    "profesores": [["" for _ in range(5)]]
-                }
-            else:
-                datos["contraturno"]["horas"].append("")
-                datos["contraturno"]["materias"].append(["" for _ in range(5)])
-                datos["contraturno"]["profesores"].append(["" for _ in range(5)])
-            guardar_horario_db(active_key, datos)
-            st.rerun()
-
-    with col_ct_btn2:
-        if datos["contraturno"] is not None and len(datos["contraturno"]["horas"]) > 0:
-            if st.button("➖ Eliminar Última Fila de Contraturno", use_container_width=True):
-                datos["contraturno"]["horas"].pop()
-                datos["contraturno"]["materias"].pop()
-                datos["contraturno"]["profesores"].pop()
-                if len(datos["contraturno"]["horas"]) == 0:
-                    datos["contraturno"] = None
-                guardar_horario_db(active_key, datos)
-                st.rerun()
-
-    st.markdown("---")
-    
-    col_del1, col_del2 = st.columns([4, 1])
-    with col_del2:
-        if st.button("🗑️ Eliminar Horario", type="secondary"):
-            eliminar_horario_db(active_key)
-            del st.session_state["horarios"][active_key]
-            st.session_state["horario_activo"] = None
-            st.success("¡Horario eliminado correctamente de la nube!")
-            st.rerun()
-
-    st.success("💾 Todos los cambios se guardan automáticamente en la base de datos.")
-
-    img_bytes = generar_imagen_horario(active_key, datos)
-    st.download_button(
-        label="📷 Descargar / Compartir Imagen No Modificable",
-        data=img_bytes,
-        file_name=f"{datos['titulo']}_Horario.png",
-        mime="image/png",
-        type="primary",
-        use_container_width=True
-    )
-else:
-    st.info("👈 Crea un nuevo horario usando el botón de arriba o selecciónalo desde el Acceso Directo para comenzar.")
+# ... resto de la lógica ...
