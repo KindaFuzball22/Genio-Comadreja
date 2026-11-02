@@ -11,7 +11,7 @@ st.set_page_config(page_title="Gestor de Horarios Escolares", page_icon="📅", 
 # ==========================================
 # CONFIGURACIÓN DE SUPABASE Y CREDENCIALES
 # ==========================================
-SUPABASE_URL = "https://TU_PROYECTO.supabase.co"
+SUPABASE_URL = "https://abcdefghijk.supabase.co"
 SUPABASE_KEY = "sb_publishable_qOY3jh9OFockRvkcrO9GNw_sWI8vLfx"
 
 # Solo intenta leer de st.secrets si la app está corriendo en la nube y existe la configuración
