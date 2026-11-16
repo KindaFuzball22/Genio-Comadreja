@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import os
 import io
+import textwrap
 from PIL import Image, ImageDraw, ImageFont
 from supabase import create_client, Client
 
@@ -108,6 +109,92 @@ if "horarios" not in st.session_state:
 if "horario_activo" not in st.session_state:
     st.session_state["horario_activo"] = None
 
+# ==========================================
+# PARSEO INTELIGENTE DE PROFESORES
+# ==========================================
+
+def extraer_profesores_celda(texto_celda):
+    """
+    Separa por comas y elimina cualquier prefijo antes del signo '='.
+    Ejemplo: 'T=Mariano, S=Ruiz' -> ['Mariano', 'Ruiz']
+    """
+    nombres_limpios = []
+    if not texto_celda or not isinstance(texto_celda, str):
+        return nombres_limpios
+    
+    partes = texto_celda.split(",")
+    for parte in partes:
+        parte_limpia = parte.strip()
+        if "=" in parte_limpia:
+            parte_limpia = parte_limpia.split("=", 1)[1].strip()
+        if parte_limpia:
+            nombres_limpios.append(parte_limpia)
+    return nombres_limpios
+
+# ==========================================
+# GENERACIÓN DE IMAGEN CON AUTO-AJUSTE DE TEXTO
+# ==========================================
+
+def obtener_fuente(size, bold=False):
+    rutas = [
+        "arialbd.ttf" if bold else "arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+    ]
+    for ruta in rutas:
+        try:
+            return ImageFont.truetype(ruta, size)
+        except:
+            continue
+    return ImageFont.load_default()
+
+def dibujar_texto_ajustado(draw, texto, x, y, ancho_caja, alto_caja, max_size=12, min_size=7, bold=False, color=(0, 0, 0)):
+    texto = str(texto).strip()
+    if not texto:
+        return
+
+    margen_x = 8
+    ancho_util = ancho_caja - margen_x
+
+    for size in range(max_size, min_size - 1, -1):
+        font = obtener_fuente(size, bold=bold)
+        bbox = draw.textbbox((0, 0), texto, font=font)
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        if w <= ancho_util:
+            pos_x = x + (ancho_caja - w) // 2
+            pos_y = y + (alto_caja - h) // 2 - 1
+            draw.text((pos_x, pos_y), texto, fill=color, font=font)
+            return
+
+    font = obtener_fuente(min_size, bold=bold)
+    mitad = len(texto) // 2
+    espacio_izq = texto.rfind(" ", 0, mitad + 4)
+    espacio_der = texto.find(" ", mitad)
+    
+    if espacio_izq != -1 and (espacio_der == -1 or (mitad - espacio_izq) <= (espacio_der - mitad)):
+        lineas = [texto[:espacio_izq].strip(), texto[espacio_izq+1:].strip()]
+    elif espacio_der != -1:
+        lineas = [texto[:espacio_der].strip(), texto[espacio_der+1:].strip()]
+    else:
+        lineas = textwrap.wrap(texto, width=max(10, int(ancho_util / (min_size * 0.55))))[:2]
+
+    alturas = []
+    anchos = []
+    for linea in lineas:
+        bbox = draw.textbbox((0, 0), linea, font=font)
+        anchos.append(bbox[2] - bbox[0])
+        alturas.append(bbox[3] - bbox[1])
+
+    espacio_entre_lineas = 2
+    alto_total_texto = sum(alturas) + espacio_entre_lineas
+    cursor_y = y + (alto_caja - alto_total_texto) // 2
+
+    for idx, linea in enumerate(lineas):
+        pos_x = x + (ancho_caja - anchos[idx]) // 2
+        draw.text((pos_x, cursor_y), linea, fill=color, font=font)
+        cursor_y += alturas[idx] + espacio_entre_lineas
+
 def generar_imagen_horario(nombre_horario, datos):
     num_filas_total = len(datos["horas"])
     if datos.get("contraturno") and "horas" in datos["contraturno"]:
@@ -118,22 +205,10 @@ def generar_imagen_horario(nombre_horario, datos):
     
     image = Image.new('RGB', (img_width, img_height), color=(255, 255, 255))
     draw = ImageDraw.Draw(image)
-    
-    try:
-        font_titulo = ImageFont.truetype("arialbd.ttf", 24)
-        font_header = ImageFont.truetype("arialbd.ttf", 14)
-        font_bold = ImageFont.truetype("arialbd.ttf", 12)
-        font_regular = ImageFont.truetype("arial.ttf", 11)
-    except:
-        font_titulo = font_header = font_bold = font_regular = ImageFont.load_default()
 
     draw.rectangle([20, 20, img_width - 20, 75], fill=(211, 211, 211), outline=(0, 0, 0))
     titulo_texto = datos.get("titulo", nombre_horario)
-    
-    bbox_t = draw.textbbox((0, 0), titulo_texto, font=font_titulo)
-    w_t = bbox_t[2] - bbox_t[0]
-    h_t = bbox_t[3] - bbox_t[1]
-    draw.text((20 + (img_width - 40 - w_t) // 2, 20 + (55 - h_t) // 2 - 2), titulo_texto, fill=(0, 0, 0), font=font_titulo)
+    dibujar_texto_ajustado(draw, titulo_texto, 20, 20, img_width - 40, 55, max_size=24, min_size=14, bold=True)
     
     dias = datos["dias"]
     ancho_total_disponible = img_width - 40
@@ -142,18 +217,12 @@ def generar_imagen_horario(nombre_horario, datos):
     
     x_cursor = 20
     draw.rectangle([x_cursor, 85, x_cursor + ancho_hora, 120], fill=(255, 255, 0), outline=(0, 0, 0))
-    bbox_h = draw.textbbox((0, 0), "HORARIO", font=font_header)
-    w_h = bbox_h[2] - bbox_h[0]
-    h_h = bbox_h[3] - bbox_h[1]
-    draw.text((x_cursor + (ancho_hora - w_h) // 2, 85 + (35 - h_h) // 2), "HORARIO", fill=(0, 0, 0), font=font_header)
+    dibujar_texto_ajustado(draw, "HORARIO", x_cursor, 85, ancho_hora, 35, max_size=14, min_size=10, bold=True)
     x_cursor += ancho_hora
 
     for dia in dias:
         draw.rectangle([x_cursor, 85, x_cursor + ancho_dia, 120], fill=(255, 255, 0), outline=(0, 0, 0))
-        bbox_d = draw.textbbox((0, 0), dia, font=font_header)
-        w_d = bbox_d[2] - bbox_d[0]
-        h_d = bbox_d[3] - bbox_d[1]
-        draw.text((x_cursor + (ancho_dia - w_d) // 2, 85 + (35 - h_d) // 2), dia, fill=(0, 0, 0), font=font_header)
+        dibujar_texto_ajustado(draw, dia, x_cursor, 85, ancho_dia, 35, max_size=14, min_size=10, bold=True)
         x_cursor += ancho_dia
 
     y_offset = 125
@@ -162,10 +231,7 @@ def generar_imagen_horario(nombre_horario, datos):
         nonlocal y_offset
         x_c = 20
         draw.rectangle([x_c, y_offset, x_c + ancho_hora, y_offset + 45], fill=color_hora, outline=(0, 0, 0))
-        bbox_hr = draw.textbbox((0, 0), hora_val, font=font_bold)
-        w_hr = bbox_hr[2] - bbox_hr[0]
-        h_hr = bbox_hr[3] - bbox_hr[1]
-        draw.text((x_c + (ancho_hora - w_hr) // 2, y_offset + (45 - h_hr) // 2), hora_val, fill=(0, 0, 0), font=font_bold)
+        dibujar_texto_ajustado(draw, hora_val, x_c, y_offset, ancho_hora, 45, max_size=12, min_size=8, bold=True)
         x_c += ancho_hora
 
         for col_idx in range(5):
@@ -175,16 +241,10 @@ def generar_imagen_horario(nombre_horario, datos):
             draw.rectangle([x_c, y_offset, x_c + ancho_dia, y_offset + 45], outline=(0, 0, 0))
             
             draw.rectangle([x_c, y_offset, x_c + ancho_dia, y_offset + 22], fill=color_mat, outline=(0, 0, 0))
-            bbox_m = draw.textbbox((0, 0), mat[:18], font=font_bold)
-            w_m = bbox_m[2] - bbox_m[0]
-            h_m = bbox_m[3] - bbox_m[1]
-            draw.text((x_c + (ancho_dia - w_m) // 2, y_offset + (22 - h_m) // 2), mat[:18], fill=(0, 0, 0), font=font_bold)
+            dibujar_texto_ajustado(draw, mat, x_c, y_offset, ancho_dia, 22, max_size=12, min_size=7, bold=True)
             
             draw.rectangle([x_c, y_offset + 22, x_c + ancho_dia, y_offset + 45], fill=(255, 255, 255), outline=(0, 0, 0))
-            bbox_p = draw.textbbox((0, 0), prof[:18], font=font_regular)
-            w_p = bbox_p[2] - bbox_p[0]
-            h_p = bbox_p[3] - bbox_p[1]
-            draw.text((x_c + (ancho_dia - w_p) // 2, y_offset + 22 + (23 - h_p) // 2), prof[:18], fill=(0, 0, 0), font=font_regular)
+            dibujar_texto_ajustado(draw, prof, x_c, y_offset + 22, ancho_dia, 23, max_size=11, min_size=7, bold=False)
             
             x_c += ancho_dia
         y_offset += 45
@@ -269,14 +329,14 @@ profesores_encontrados = set()
 for h in st.session_state["horarios"].values():
     for row in h.get("profesores", []):
         for p in row:
-            if p and p.strip():
-                profesores_encontrados.add(p.strip())
+            for nombre_indiv in extraer_profesores_celda(p):
+                profesores_encontrados.add(nombre_indiv)
     ct = h.get("contraturno")
     if ct and isinstance(ct, dict):
         for row in ct.get("profesores", []):
             for p in row:
-                if p and p.strip():
-                    profesores_encontrados.add(p.strip())
+                for nombre_indiv in extraer_profesores_celda(p):
+                    profesores_encontrados.add(nombre_indiv)
 
 lista_profesores = sorted(list(profesores_encontrados))
 lista_cursos = sorted(list({h.get("curso", "").strip() for h in st.session_state["horarios"].values() if h.get("curso", "").strip()}))
@@ -322,11 +382,22 @@ for key, h_data in st.session_state["horarios"].items():
         cumple = False
     
     if search_prof != "":
-        prof_en_principal = any(search_prof.lower() in p.lower() for row in h_data.get("profesores", []) for p in row if p)
+        objetivo_prof = search_prof.lower()
+        prof_en_principal = any(
+            objetivo_prof == nombre_indiv.lower()
+            for row in h_data.get("profesores", [])
+            for p in row
+            for nombre_indiv in extraer_profesores_celda(p)
+        )
         ct_data = h_data.get("contraturno")
         prof_en_ct = False
         if ct_data and isinstance(ct_data, dict):
-            prof_en_ct = any(search_prof.lower() in p.lower() for row in ct_data.get("profesores", []) for p in row if p)
+            prof_en_ct = any(
+                objetivo_prof == nombre_indiv.lower()
+                for row in ct_data.get("profesores", [])
+                for p in row
+                for nombre_indiv in extraer_profesores_celda(p)
+            )
         
         if not (prof_en_principal or prof_en_ct):
             cumple = False
