@@ -7,9 +7,9 @@ import textwrap
 import base64
 from PIL import Image, ImageDraw, ImageFont
 from supabase import create_client, Client
-
+ 
 st.set_page_config(page_title="Gestor de Horarios Escolares", page_icon="📅", layout="wide")
-
+ 
 # Centrar el texto del botón "➕" dentro de su barra (expander)
 st.markdown(
     """
@@ -24,21 +24,21 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
+ 
 # ==========================================
 # CONFIGURACIÓN DE SUPABASE Y CREDENCIALES
 # ==========================================
 SUPABASE_URL = "https://ibcevhvocpblyurbzqbl.supabase.co"
 SUPABASE_KEY = "sb_publishable_qOY3jh9OFockRvkcrO9GNw_sWI8vLfx"
-
+ 
 @st.cache_resource
 def init_supabase():
     return create_client(SUPABASE_URL.strip(), SUPABASE_KEY.strip())
-
+ 
 supabase: Client = init_supabase()
-
+ 
 CONFIG_FILE = "config.json"
-
+ 
 def cargar_config():
     if os.path.exists(CONFIG_FILE):
         try:
@@ -47,17 +47,17 @@ def cargar_config():
         except:
             return {"contrasena": "1234"}
     return {"contrasena": "1234"}
-
+ 
 def guardar_config(config):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=4)
-
+ 
 if "config" not in st.session_state:
     st.session_state["config"] = cargar_config()
-
+ 
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
-
+ 
 def fondo_login_css():
     """Fondo de la pantalla de contraseña (fondo.jpg junto a app.py), adaptado al tamaño de pantalla."""
     ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fondo.jpg")
@@ -70,7 +70,7 @@ def fondo_login_css():
     [data-testid="stAppViewContainer"] {{
         background-image: linear-gradient(rgba(0,0,0,0.30), rgba(0,0,0,0.30)), url("data:image/jpeg;base64,{b64}");
         background-size: cover;
-        background-position: center 55%;
+        background-position: center bottom;
         background-repeat: no-repeat;
         background-attachment: fixed;
     }}
@@ -79,7 +79,7 @@ def fondo_login_css():
     }}
     </style>
     """
-
+ 
 if not st.session_state["autenticado"]:
     st.markdown(fondo_login_css(), unsafe_allow_html=True)
     _, col_centro, _ = st.columns([1, 1, 1])
@@ -93,11 +93,11 @@ if not st.session_state["autenticado"]:
             else:
                 st.error("Contraseña incorrecta.")
     st.stop()
-
+ 
 # ==========================================
 # FUNCIONES DE BASE DE DATOS (SUPABASE)
 # ==========================================
-
+ 
 def cargar_datos_db():
     try:
         response = supabase.table("horarios").select("*").execute()
@@ -119,7 +119,7 @@ def cargar_datos_db():
     except Exception as e:
         st.session_state["error_conexion"] = str(e)
         return {}
-
+ 
 def guardar_horario_db(titulo, datos):
     try:
         payload = {
@@ -136,33 +136,33 @@ def guardar_horario_db(titulo, datos):
         supabase.table("horarios").upsert(payload).execute()
     except Exception as e:
         st.error(f"Error al guardar en la base de datos: {e}")
-
+ 
 def eliminar_horario_db(titulo):
     try:
         supabase.table("horarios").delete().eq("id", titulo).execute()
     except Exception as e:
         st.error(f"Error al eliminar de la base de datos: {e}")
-
+ 
 if "error_conexion" not in st.session_state:
     st.session_state["error_conexion"] = None
-
+ 
 if "horarios" not in st.session_state:
     st.session_state["horarios"] = cargar_datos_db()
-
+ 
 if st.session_state["error_conexion"]:
     st.error(f"Error al conectar con la base de datos: {st.session_state['error_conexion']} (Verifica en Supabase que el proyecto no esté pausado).")
     if st.button("🔄 Reintentar conexión con la base de datos", type="primary"):
         st.cache_resource.clear()
         st.session_state["horarios"] = cargar_datos_db()
         st.rerun()
-
+ 
 if "horario_activo" not in st.session_state:
     st.session_state["horario_activo"] = None
-
+ 
 # ==========================================
 # PARSEO INTELIGENTE DE PROFESORES
 # ==========================================
-
+ 
 def extraer_profesores_celda(texto_celda):
     """
     Separa por comas y elimina cualquier prefijo antes del signo '='.
@@ -180,11 +180,11 @@ def extraer_profesores_celda(texto_celda):
         if parte_limpia:
             nombres_limpios.append(parte_limpia)
     return nombres_limpios
-
+ 
 # ==========================================
 # GENERACIÓN DE IMAGEN CON AUTO-AJUSTE DE TEXTO
 # ==========================================
-
+ 
 def obtener_fuente(size, bold=False):
     rutas = [
         "arialbd.ttf" if bold else "arial.ttf",
@@ -197,15 +197,15 @@ def obtener_fuente(size, bold=False):
         except:
             continue
     return ImageFont.load_default()
-
+ 
 def dibujar_texto_ajustado(draw, texto, x, y, ancho_caja, alto_caja, max_size=12, min_size=7, bold=False, color=(0, 0, 0)):
     texto = str(texto).strip()
     if not texto:
         return
-
+ 
     margen_x = 8
     ancho_util = ancho_caja - margen_x
-
+ 
     for size in range(max_size, min_size - 1, -1):
         font = obtener_fuente(size, bold=bold)
         bbox = draw.textbbox((0, 0), texto, font=font)
@@ -216,7 +216,7 @@ def dibujar_texto_ajustado(draw, texto, x, y, ancho_caja, alto_caja, max_size=12
             pos_y = y + (alto_caja - h) // 2 - 1
             draw.text((pos_x, pos_y), texto, fill=color, font=font)
             return
-
+ 
     font = obtener_fuente(min_size, bold=bold)
     mitad = len(texto) // 2
     espacio_izq = texto.rfind(" ", 0, mitad + 4)
@@ -228,23 +228,23 @@ def dibujar_texto_ajustado(draw, texto, x, y, ancho_caja, alto_caja, max_size=12
         lineas = [texto[:espacio_der].strip(), texto[espacio_der+1:].strip()]
     else:
         lineas = textwrap.wrap(texto, width=max(10, int(ancho_util / (min_size * 0.55))))[:2]
-
+ 
     alturas = []
     anchos = []
     for linea in lineas:
         bbox = draw.textbbox((0, 0), linea, font=font)
         anchos.append(bbox[2] - bbox[0])
         alturas.append(bbox[3] - bbox[1])
-
+ 
     espacio_entre_lineas = 2
     alto_total_texto = sum(alturas) + espacio_entre_lineas
     cursor_y = y + (alto_caja - alto_total_texto) // 2
-
+ 
     for idx, linea in enumerate(lineas):
         pos_x = x + (ancho_caja - anchos[idx]) // 2
         draw.text((pos_x, cursor_y), linea, fill=color, font=font)
         cursor_y += alturas[idx] + espacio_entre_lineas
-
+ 
 def generar_imagen_horario(nombre_horario, datos):
     num_filas_total = len(datos["horas"])
     if datos.get("contraturno") and "horas" in datos["contraturno"]:
@@ -255,7 +255,7 @@ def generar_imagen_horario(nombre_horario, datos):
     
     image = Image.new('RGB', (img_width, img_height), color=(255, 255, 255))
     draw = ImageDraw.Draw(image)
-
+ 
     draw.rectangle([20, 20, img_width - 20, 75], fill=(211, 211, 211), outline=(0, 0, 0))
     titulo_texto = datos.get("titulo", nombre_horario)
     dibujar_texto_ajustado(draw, titulo_texto, 20, 20, img_width - 40, 55, max_size=24, min_size=14, bold=True)
@@ -269,12 +269,12 @@ def generar_imagen_horario(nombre_horario, datos):
     draw.rectangle([x_cursor, 85, x_cursor + ancho_hora, 120], fill=(255, 255, 0), outline=(0, 0, 0))
     dibujar_texto_ajustado(draw, "HORARIO", x_cursor, 85, ancho_hora, 35, max_size=14, min_size=10, bold=True)
     x_cursor += ancho_hora
-
+ 
     for dia in dias:
         draw.rectangle([x_cursor, 85, x_cursor + ancho_dia, 120], fill=(255, 255, 0), outline=(0, 0, 0))
         dibujar_texto_ajustado(draw, dia, x_cursor, 85, ancho_dia, 35, max_size=14, min_size=10, bold=True)
         x_cursor += ancho_dia
-
+ 
     y_offset = 125
     
     def dibujar_fila(hora_val, materias_row, profs_row, color_hora, color_mat):
@@ -283,7 +283,7 @@ def generar_imagen_horario(nombre_horario, datos):
         draw.rectangle([x_c, y_offset, x_c + ancho_hora, y_offset + 45], fill=color_hora, outline=(0, 0, 0))
         dibujar_texto_ajustado(draw, hora_val, x_c, y_offset, ancho_hora, 45, max_size=12, min_size=8, bold=True)
         x_c += ancho_hora
-
+ 
         for col_idx in range(5):
             mat = materias_row[col_idx]
             prof = profs_row[col_idx]
@@ -298,19 +298,19 @@ def generar_imagen_horario(nombre_horario, datos):
             
             x_c += ancho_dia
         y_offset += 45
-
+ 
     for row_idx in range(len(datos["horas"])):
         dibujar_fila(datos["horas"][row_idx], datos["materias"][row_idx], datos["profesores"][row_idx], (255, 165, 0), (173, 216, 230))
-
+ 
     if datos.get("contraturno"):
         ct = datos["contraturno"]
         for row_idx in range(len(ct["horas"])):
             dibujar_fila(ct["horas"][row_idx], ct["materias"][row_idx], ct["profesores"][row_idx], (221, 160, 221), (238, 232, 170))
-
+ 
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
-
+ 
 col_tit, col_btn = st.columns([5, 1])
 with col_tit:
     st.title("Genio Comadreja")
@@ -318,7 +318,7 @@ with col_btn:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔑 Cambiar Contraseña", use_container_width=True):
         st.session_state["cambiando_pass"] = True
-
+ 
 if st.session_state.get("cambiando_pass", False):
     with st.expander("🔒 Panel de Cambio de Contraseña", expanded=True):
         pass_actual = st.text_input("Contraseña Actual", type="password")
@@ -343,9 +343,9 @@ if st.session_state.get("cambiando_pass", False):
             if st.button("Cancelar"):
                 st.session_state["cambiando_pass"] = False
                 st.rerun()
-
+ 
 st.markdown("---")
-
+ 
 col_top1, col_top2 = st.columns([1, 4])
 with col_top1:
     with st.expander("➕"):
@@ -372,9 +372,9 @@ with col_top1:
                 st.rerun()
             else:
                 st.error("Por favor ingresa un título válido que no esté repetido.")
-
+ 
 st.markdown("### Buscar")
-
+ 
 profesores_encontrados = set()
 for h in st.session_state["horarios"].values():
     for row in h.get("profesores", []):
@@ -387,11 +387,11 @@ for h in st.session_state["horarios"].values():
             for p in row:
                 for nombre_indiv in extraer_profesores_celda(p):
                     profesores_encontrados.add(nombre_indiv)
-
+ 
 lista_profesores = sorted(list(profesores_encontrados))
 lista_cursos = sorted(list({h.get("curso", "").strip() for h in st.session_state["horarios"].values() if h.get("curso", "").strip()}))
 lista_divisiones = sorted(list({h.get("division", "").strip() for h in st.session_state["horarios"].values() if h.get("division", "").strip()}))
-
+ 
 materias_encontradas = set()
 for h in st.session_state["horarios"].values():
     for row in h.get("materias", []):
@@ -404,10 +404,10 @@ for h in st.session_state["horarios"].values():
             for m in row:
                 if m and m.strip():
                     materias_encontradas.add(m.strip())
-
+ 
 lista_materias = sorted(list(materias_encontradas))
 lista_titulos_horarios = sorted(list(st.session_state["horarios"].keys()))
-
+ 
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
     search_prof = st.selectbox("Profesor", lista_profesores, index=None, placeholder="Escoge una opcion") or ""
@@ -419,10 +419,10 @@ with col4:
     search_materia = st.selectbox("Materia", lista_materias, index=None, placeholder="Escoge una opcion") or ""
 with col5:
     search_directo = st.selectbox("Acceso Directo", lista_titulos_horarios, index=None, placeholder="Escoge una opcion") or ""
-
+ 
 if search_directo != "":
     st.session_state["horario_activo"] = search_directo
-
+ 
 coincidencias = []
 for key, h_data in st.session_state["horarios"].items():
     cumple = True
@@ -464,7 +464,7 @@ for key, h_data in st.session_state["horarios"].items():
             
     if cumple:
         coincidencias.append(key)
-
+ 
 if search_directo == "" and (search_prof != "" or search_curso != "" or search_div != "" or search_materia != ""):
     st.markdown("#### 📋 Resultados de Búsqueda:")
     if coincidencias:
@@ -476,11 +476,11 @@ if search_directo == "" and (search_prof != "" or search_curso != "" or search_d
                     st.rerun()
     else:
         st.info("No se encontraron horarios con los filtros seleccionados.")
-
+ 
 st.markdown("---")
-
+ 
 active_key = st.session_state["horario_activo"]
-
+ 
 if active_key and active_key in st.session_state["horarios"]:
     datos = st.session_state["horarios"][active_key]
     
@@ -508,14 +508,14 @@ if active_key and active_key in st.session_state["horarios"]:
         if nueva_div != datos["division"]:
             datos["division"] = nueva_div.strip()
             guardar_horario_db(active_key, datos)
-
+ 
     st.markdown("##### Horario principal")
     
     cols_grid = st.columns([1.5, 2, 2, 2, 2, 2])
     cols_grid[0].markdown("**HORARIO**")
     for idx, dia in enumerate(datos["dias"]):
         cols_grid[idx + 1].markdown(f"**{dia}**")
-
+ 
     for i in range(9):
         cols_row = st.columns([1.5, 2, 2, 2, 2, 2])
         nueva_hora = cols_row[0].text_input(f"H{i}", value=datos["horas"][i], key=f"h_{active_key}_{i}", placeholder="Hora", label_visibility="collapsed")
@@ -534,7 +534,7 @@ if active_key and active_key in st.session_state["horarios"]:
                 if nuevo_prof != datos["profesores"][i][j]:
                     datos["profesores"][i][j] = nuevo_prof
                     guardar_horario_db(active_key, datos)
-
+ 
     st.markdown("---")
     st.markdown("##### 🌙 Sección Contraturno")
     
@@ -558,7 +558,7 @@ if active_key and active_key in st.session_state["horarios"]:
                     if ct_p_val != ct["profesores"][i][j]:
                         ct["profesores"][i][j] = ct_p_val
                         guardar_horario_db(active_key, datos)
-
+ 
     col_ct_btn1, col_ct_btn2 = st.columns(2)
     with col_ct_btn1:
         if st.button("➕ Agregar 1 Fila de Contraturno", use_container_width=True):
@@ -574,7 +574,7 @@ if active_key and active_key in st.session_state["horarios"]:
                 datos["contraturno"]["profesores"].append(["" for _ in range(5)])
             guardar_horario_db(active_key, datos)
             st.rerun()
-
+ 
     with col_ct_btn2:
         if datos["contraturno"] is not None and len(datos["contraturno"]["horas"]) > 0:
             if st.button("➖ Eliminar Última Fila de Contraturno", use_container_width=True):
@@ -585,7 +585,7 @@ if active_key and active_key in st.session_state["horarios"]:
                     datos["contraturno"] = None
                 guardar_horario_db(active_key, datos)
                 st.rerun()
-
+ 
     st.markdown("---")
     
     col_del1, col_del2 = st.columns([4, 1])
@@ -596,7 +596,7 @@ if active_key and active_key in st.session_state["horarios"]:
             st.session_state["horario_activo"] = None
             st.success("¡Horario eliminado correctamente de la nube!")
             st.rerun()
-
+ 
     img_bytes = generar_imagen_horario(active_key, datos)
     st.download_button(
         label="📷 Descargar / Compartir Imagen No Modificable",
