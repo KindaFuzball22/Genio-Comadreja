@@ -4,10 +4,26 @@ import json
 import os
 import io
 import textwrap
+import base64
 from PIL import Image, ImageDraw, ImageFont
 from supabase import create_client, Client
 
 st.set_page_config(page_title="Gestor de Horarios Escolares", page_icon="📅", layout="wide")
+
+# Centrar el texto del botón "➕" dentro de su barra (expander)
+st.markdown(
+    """
+    <style>
+    div[data-testid="stExpander"] summary {
+        justify-content: center;
+    }
+    div[data-testid="stExpander"] summary p {
+        text-align: center;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ==========================================
 # CONFIGURACIÓN DE SUPABASE Y CREDENCIALES
@@ -17,7 +33,7 @@ SUPABASE_KEY = "sb_publishable_qOY3jh9OFockRvkcrO9GNw_sWI8vLfx"
 
 @st.cache_resource
 def init_supabase():
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+    return create_client(SUPABASE_URL.strip(), SUPABASE_KEY.strip())
 
 supabase: Client = init_supabase()
 
@@ -42,7 +58,30 @@ if "config" not in st.session_state:
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
+def fondo_login_css():
+    """Fondo de la pantalla de contraseña (fondo.jpg junto a app.py), adaptado al tamaño de pantalla."""
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fondo.jpg")
+    if not os.path.exists(ruta):
+        return ""
+    with open(ruta, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    return f"""
+    <style>
+    [data-testid="stAppViewContainer"] {{
+        background-image: linear-gradient(rgba(0,0,0,0.30), rgba(0,0,0,0.30)), url("data:image/jpeg;base64,{b64}");
+        background-size: cover;
+        background-position: center 55%;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    [data-testid="stHeader"] {{
+        background: transparent;
+    }}
+    </style>
+    """
+
 if not st.session_state["autenticado"]:
+    st.markdown(fondo_login_css(), unsafe_allow_html=True)
     _, col_centro, _ = st.columns([1, 1, 1])
     with col_centro:
         st.markdown("<br><br><br>", unsafe_allow_html=True)
@@ -75,9 +114,10 @@ def cargar_datos_db():
                 "profesores": row["profesores"],
                 "contraturno": row["contraturno"]
             }
+        st.session_state["error_conexion"] = None
         return horarios_dict
     except Exception as e:
-        st.error(f"Error al conectar con la base de datos: {e}")
+        st.session_state["error_conexion"] = str(e)
         return {}
 
 def guardar_horario_db(titulo, datos):
@@ -103,8 +143,18 @@ def eliminar_horario_db(titulo):
     except Exception as e:
         st.error(f"Error al eliminar de la base de datos: {e}")
 
+if "error_conexion" not in st.session_state:
+    st.session_state["error_conexion"] = None
+
 if "horarios" not in st.session_state:
     st.session_state["horarios"] = cargar_datos_db()
+
+if st.session_state["error_conexion"]:
+    st.error(f"Error al conectar con la base de datos: {st.session_state['error_conexion']} (Verifica en Supabase que el proyecto no esté pausado).")
+    if st.button("🔄 Reintentar conexión con la base de datos", type="primary"):
+        st.cache_resource.clear()
+        st.session_state["horarios"] = cargar_datos_db()
+        st.rerun()
 
 if "horario_activo" not in st.session_state:
     st.session_state["horario_activo"] = None
@@ -263,7 +313,7 @@ def generar_imagen_horario(nombre_horario, datos):
 
 col_tit, col_btn = st.columns([5, 1])
 with col_tit:
-    st.title("🏫 Gestor Centralizado de Horarios Escolares")
+    st.title("Genio Comadreja")
 with col_btn:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔑 Cambiar Contraseña", use_container_width=True):
@@ -298,7 +348,7 @@ st.markdown("---")
 
 col_top1, col_top2 = st.columns([1, 4])
 with col_top1:
-    with st.expander("➕ Crear Nuevo Horario"):
+    with st.expander("➕"):
         nuevo_tit = st.text_input("Título del Horario (ej: 6to G 2026)", value="")
         n_curso = st.text_input("Curso (ej: 6)", value="")
         n_div = st.text_input("División (ej: G)", value="")
@@ -323,7 +373,7 @@ with col_top1:
             else:
                 st.error("Por favor ingresa un título válido que no esté repetido.")
 
-st.markdown("### 🔍 Panel de Búsqueda Combinada")
+st.markdown("### Buscar")
 
 profesores_encontrados = set()
 for h in st.session_state["horarios"].values():
@@ -360,15 +410,15 @@ lista_titulos_horarios = sorted(list(st.session_state["horarios"].keys()))
 
 col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
-    search_prof = st.selectbox("Profesor", [""] + lista_profesores)
+    search_prof = st.selectbox("Profesor", lista_profesores, index=None, placeholder="Escoge una opcion") or ""
 with col2:
-    search_curso = st.selectbox("Curso", [""] + lista_cursos)
+    search_curso = st.selectbox("Curso", lista_cursos, index=None, placeholder="Escoge una opcion") or ""
 with col3:
-    search_div = st.selectbox("División", [""] + lista_divisiones)
+    search_div = st.selectbox("División", lista_divisiones, index=None, placeholder="Escoge una opcion") or ""
 with col4:
-    search_materia = st.selectbox("Materia", [""] + lista_materias)
+    search_materia = st.selectbox("Materia", lista_materias, index=None, placeholder="Escoge una opcion") or ""
 with col5:
-    search_directo = st.selectbox("Acceso Directo", [""] + lista_titulos_horarios)
+    search_directo = st.selectbox("Acceso Directo", lista_titulos_horarios, index=None, placeholder="Escoge una opcion") or ""
 
 if search_directo != "":
     st.session_state["horario_activo"] = search_directo
@@ -459,7 +509,7 @@ if active_key and active_key in st.session_state["horarios"]:
             datos["division"] = nueva_div.strip()
             guardar_horario_db(active_key, datos)
 
-    st.markdown("##### 📅 Grilla Principal (9 Horas)")
+    st.markdown("##### Horario principal")
     
     cols_grid = st.columns([1.5, 2, 2, 2, 2, 2])
     cols_grid[0].markdown("**HORARIO**")
@@ -546,8 +596,6 @@ if active_key and active_key in st.session_state["horarios"]:
             st.session_state["horario_activo"] = None
             st.success("¡Horario eliminado correctamente de la nube!")
             st.rerun()
-
-    st.success("💾 Todos los cambios se guardan automáticamente en la base de datos.")
 
     img_bytes = generar_imagen_horario(active_key, datos)
     st.download_button(
