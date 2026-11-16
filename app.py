@@ -20,15 +20,6 @@ st.markdown(
     div[data-testid="stExpander"] summary p {
         text-align: center;
     }
-    /* Reproductor de música invisible (suena, pero no se ve) */
-    div[data-testid="stAudio"] {
-        position: fixed;
-        width: 1px;
-        height: 1px;
-        opacity: 0;
-        overflow: hidden;
-        pointer-events: none;
-    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -37,14 +28,27 @@ st.markdown(
 # ==========================================
 # MÚSICA (carpeta "musica" junto a app.py)
 # ==========================================
-MUSICA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "musica")
 EXTENSIONES_AUDIO = (".mp3", ".wav", ".ogg", ".m4a")
+
+def carpeta_musica():
+    """Busca la carpeta 'musica' (sin importar mayúsculas) junto a app.py o en la carpeta de trabajo."""
+    base = os.path.dirname(os.path.abspath(__file__))
+    for carpeta in (base, os.getcwd()):
+        try:
+            for nombre in os.listdir(carpeta):
+                ruta = os.path.join(carpeta, nombre)
+                if nombre.lower() == "musica" and os.path.isdir(ruta):
+                    return ruta
+        except OSError:
+            pass
+    return None
 
 def listar_canciones():
     """Canciones ordenadas por nombre de archivo (ej: 01_..., 02_..., 03_...)."""
-    if not os.path.isdir(MUSICA_DIR):
+    carpeta = carpeta_musica()
+    if carpeta is None:
         return []
-    return sorted(f for f in os.listdir(MUSICA_DIR) if f.lower().endswith(EXTENSIONES_AUDIO))
+    return sorted(f for f in os.listdir(carpeta) if f.lower().endswith(EXTENSIONES_AUDIO))
 
 if "cancion_idx" not in st.session_state:
     st.session_state["cancion_idx"] = -1  # -1 = silencio
@@ -79,7 +83,35 @@ with contenedor_musica:
     _canciones = listar_canciones()
     _idx = st.session_state["cancion_idx"]
     if 0 <= _idx < len(_canciones):
-        st.audio(os.path.join(MUSICA_DIR, _canciones[_idx]), autoplay=True, loop=True)
+        st.markdown(
+            """
+            <style>
+            /* Barra de reproducción fija abajo del todo (login y programa) */
+            audio[data-testid="stAudio"] {
+                position: fixed;
+                bottom: max(12px, env(safe-area-inset-bottom));
+                left: 50%;
+                transform: translateX(-50%);
+                width: min(calc(100vw - 16px), 640px);
+                height: 48px;
+                z-index: 999;
+                border-radius: 999px;
+                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+            }
+            /* Para que la barra no tape el contenido al final de la página */
+            .block-container {
+                padding-bottom: 6rem;
+            }
+            @media (max-width: 640px) {
+                audio[data-testid="stAudio"] {
+                    height: 44px;
+                }
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.audio(os.path.join(carpeta_musica(), _canciones[_idx]), autoplay=True, loop=True)
 
 # ==========================================
 # CONFIGURACIÓN DE SUPABASE Y CREDENCIALES
@@ -132,6 +164,12 @@ def fondo_login_css():
     }}
     [data-testid="stHeader"] {{
         background: transparent;
+    }}
+    /* Celulares: el fondo fijo no se lleva bien con iOS/Android, se usa uno normal */
+    @media (max-width: 640px) {{
+        [data-testid="stAppViewContainer"] {{
+            background-attachment: scroll;
+        }}
     }}
     </style>
     """
@@ -380,6 +418,13 @@ with col_btn:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔑 Cambiar Contraseña", use_container_width=True):
         st.session_state["cambiando_pass"] = True
+
+if not listar_canciones():
+    _carpeta = carpeta_musica()
+    if _carpeta is None:
+        st.caption(f"🎵 No encuentro la carpeta 'musica'. Busqué junto a app.py en: {os.path.dirname(os.path.abspath(__file__))}")
+    else:
+        st.caption(f"🎵 La carpeta 'musica' no tiene audios válidos (mp3, wav, ogg, m4a). Contiene: {sorted(os.listdir(_carpeta))}")
 
 if st.session_state.get("cambiando_pass", False):
     with st.expander("🔒 Panel de Cambio de Contraseña", expanded=True):
