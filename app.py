@@ -20,6 +20,56 @@ st.markdown(
     div[data-testid="stExpander"] summary p {
         text-align: center;
     }
+    /* Celulares: la tabla de edición se ve igual que en PC y se desliza hacia los lados */
+    @media (max-width: 640px) {
+        .st-key-grilla_horario,
+        .st-key-grilla_contraturno {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 0.5rem;
+            gap: 0.35rem !important;
+        }
+        .st-key-grilla_horario [data-testid="stHorizontalBlock"],
+        .st-key-grilla_contraturno [data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            min-width: 700px;
+            gap: 0.25rem !important;
+        }
+        .st-key-grilla_horario [data-testid="stColumn"],
+        .st-key-grilla_horario [data-testid="column"],
+        .st-key-grilla_contraturno [data-testid="stColumn"],
+        .st-key-grilla_contraturno [data-testid="column"] {
+            flex: 1 1 110px !important;
+            width: auto !important;
+            min-width: 0 !important;
+        }
+        .st-key-grilla_horario [data-testid="stColumn"]:first-child,
+        .st-key-grilla_horario [data-testid="column"]:first-child,
+        .st-key-grilla_contraturno [data-testid="stColumn"]:first-child,
+        .st-key-grilla_contraturno [data-testid="column"]:first-child {
+            flex: 0 0 64px !important;
+        }
+        .st-key-grilla_horario [data-testid="stColumn"] [data-testid="stVerticalBlock"],
+        .st-key-grilla_contraturno [data-testid="stColumn"] [data-testid="stVerticalBlock"] {
+            gap: 0.25rem !important;
+        }
+        .st-key-grilla_horario input,
+        .st-key-grilla_contraturno input {
+            font-size: 12px !important;
+            padding: 2px 6px !important;
+        }
+        .st-key-grilla_horario [data-baseweb="input"],
+        .st-key-grilla_contraturno [data-baseweb="input"],
+        .st-key-grilla_horario [data-baseweb="base-input"],
+        .st-key-grilla_contraturno [data-baseweb="base-input"] {
+            min-height: 28px !important;
+            height: 28px !important;
+        }
+        .st-key-grilla_horario p,
+        .st-key-grilla_contraturno p {
+            font-size: 12px !important;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -618,53 +668,55 @@ if active_key and active_key in st.session_state["horarios"]:
 
     st.markdown("##### Horario principal")
     
-    cols_grid = st.columns([1.5, 2, 2, 2, 2, 2])
-    cols_grid[0].markdown("**HORARIO**")
-    for idx, dia in enumerate(datos["dias"]):
-        cols_grid[idx + 1].markdown(f"**{dia}**")
+    with st.container(key="grilla_horario"):
+        cols_grid = st.columns([1.5, 2, 2, 2, 2, 2])
+        cols_grid[0].markdown("**HORARIO**")
+        for idx, dia in enumerate(datos["dias"]):
+            cols_grid[idx + 1].markdown(f"**{dia}**")
 
-    for i in range(9):
-        cols_row = st.columns([1.5, 2, 2, 2, 2, 2])
-        nueva_hora = cols_row[0].text_input(f"H{i}", value=datos["horas"][i], key=f"h_{active_key}_{i}", placeholder="Hora", label_visibility="collapsed")
-        if nueva_hora != datos["horas"][i]:
-            datos["horas"][i] = nueva_hora
-            guardar_horario_db(active_key, datos)
+        for i in range(9):
+            cols_row = st.columns([1.5, 2, 2, 2, 2, 2])
+            nueva_hora = cols_row[0].text_input(f"H{i}", value=datos["horas"][i], key=f"h_{active_key}_{i}", placeholder="Hora", label_visibility="collapsed")
+            if nueva_hora != datos["horas"][i]:
+                datos["horas"][i] = nueva_hora
+                guardar_horario_db(active_key, datos)
         
-        for j in range(5):
-            with cols_row[j + 1]:
-                nueva_mat = cols_row[j + 1].text_input(f"M{i}_{j}", value=datos["materias"][i][j], key=f"m_{active_key}_{i}_{j}", placeholder="Materia", label_visibility="collapsed")
-                nuevo_prof = cols_row[j + 1].text_input(f"P{i}_{j}", value=datos["profesores"][i][j], key=f"p_{active_key}_{i}_{j}", placeholder="Profesor", label_visibility="collapsed")
+            for j in range(5):
+                with cols_row[j + 1]:
+                    nueva_mat = cols_row[j + 1].text_input(f"M{i}_{j}", value=datos["materias"][i][j], key=f"m_{active_key}_{i}_{j}", placeholder="Materia", label_visibility="collapsed")
+                    nuevo_prof = cols_row[j + 1].text_input(f"P{i}_{j}", value=datos["profesores"][i][j], key=f"p_{active_key}_{i}_{j}", placeholder="Profesor", label_visibility="collapsed")
                 
-                if nueva_mat != datos["materias"][i][j]:
-                    datos["materias"][i][j] = nueva_mat
-                    guardar_horario_db(active_key, datos)
-                if nuevo_prof != datos["profesores"][i][j]:
-                    datos["profesores"][i][j] = nuevo_prof
-                    guardar_horario_db(active_key, datos)
+                    if nueva_mat != datos["materias"][i][j]:
+                        datos["materias"][i][j] = nueva_mat
+                        guardar_horario_db(active_key, datos)
+                    if nuevo_prof != datos["profesores"][i][j]:
+                        datos["profesores"][i][j] = nuevo_prof
+                        guardar_horario_db(active_key, datos)
 
     st.markdown("---")
     st.markdown("##### 🌙 Sección Contraturno")
     
-    if datos["contraturno"] is not None:
-        ct = datos["contraturno"]
-        for i in range(len(ct["horas"])):
-            cols_ct = st.columns([1.5, 2, 2, 2, 2, 2])
-            ct_h_val = cols_ct[0].text_input(f"CT H{i}", value=ct["horas"][i], key=f"ct_h_{active_key}_{i}", placeholder="Hora", label_visibility="collapsed")
-            if ct_h_val != ct["horas"][i]:
-                ct["horas"][i] = ct_h_val
-                guardar_horario_db(active_key, datos)
+    with st.container(key="grilla_contraturno"):
+        if datos["contraturno"] is not None:
+            ct = datos["contraturno"]
+            for i in range(len(ct["horas"])):
+                cols_ct = st.columns([1.5, 2, 2, 2, 2, 2])
+                ct_h_val = cols_ct[0].text_input(f"CT H{i}", value=ct["horas"][i], key=f"ct_h_{active_key}_{i}", placeholder="Hora", label_visibility="collapsed")
+                if ct_h_val != ct["horas"][i]:
+                    ct["horas"][i] = ct_h_val
+                    guardar_horario_db(active_key, datos)
                 
-            for j in range(5):
-                with cols_ct[j + 1]:
-                    ct_m_val = cols_ct[j + 1].text_input(f"CT M{i}_{j}", value=ct["materias"][i][j], key=f"ct_m_{active_key}_{i}_{j}", placeholder="Materia", label_visibility="collapsed")
-                    ct_p_val = cols_ct[j + 1].text_input(f"CT P{i}_{j}", value=ct["profesores"][i][j], key=f"ct_p_{active_key}_{i}_{j}", placeholder="Profesor", label_visibility="collapsed")
+                for j in range(5):
+                    with cols_ct[j + 1]:
+                        ct_m_val = cols_ct[j + 1].text_input(f"CT M{i}_{j}", value=ct["materias"][i][j], key=f"ct_m_{active_key}_{i}_{j}", placeholder="Materia", label_visibility="collapsed")
+                        ct_p_val = cols_ct[j + 1].text_input(f"CT P{i}_{j}", value=ct["profesores"][i][j], key=f"ct_p_{active_key}_{i}_{j}", placeholder="Profesor", label_visibility="collapsed")
                     
-                    if ct_m_val != ct["materias"][i][j]:
-                        ct["materias"][i][j] = ct_m_val
-                        guardar_horario_db(active_key, datos)
-                    if ct_p_val != ct["profesores"][i][j]:
-                        ct["profesores"][i][j] = ct_p_val
-                        guardar_horario_db(active_key, datos)
+                        if ct_m_val != ct["materias"][i][j]:
+                            ct["materias"][i][j] = ct_m_val
+                            guardar_horario_db(active_key, datos)
+                        if ct_p_val != ct["profesores"][i][j]:
+                            ct["profesores"][i][j] = ct_p_val
+                            guardar_horario_db(active_key, datos)
 
     col_ct_btn1, col_ct_btn2 = st.columns(2)
     with col_ct_btn1:
